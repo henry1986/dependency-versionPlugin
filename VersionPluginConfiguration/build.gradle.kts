@@ -5,7 +5,7 @@ plugins {
 }
 
 group = "org.daiv.dependency"
-version = "0.0.10"
+version = "0.0.14"
 
 repositories {
     mavenCentral()

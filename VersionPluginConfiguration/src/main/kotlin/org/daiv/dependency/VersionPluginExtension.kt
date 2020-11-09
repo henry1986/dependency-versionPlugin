@@ -14,6 +14,11 @@ fun <T : Any> T.incrementVersion(func: T.() -> String): String {
     return func().incrementVersion()
 }
 
+interface Incrementable<T>{
+    fun versionObject():T = this as T
+    fun setVersion(member: T.()->String) = incrementVersion { versionObject().member() }
+}
+
 class VersionPluginExtension<T : Any> {
     lateinit var clazz: KClass<T>
     lateinit var versionJsonPath: String

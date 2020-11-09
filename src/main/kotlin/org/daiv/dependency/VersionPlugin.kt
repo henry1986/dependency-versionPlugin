@@ -39,10 +39,10 @@ data class VersionPluginConfiguration<T : Any>(
             prop.load(FileReader(versionPropertiesFile))
         }
 
-        val version = prop.getProperty(configure.versionKey)
+        val version by lazy { prop.getProperty(configure.versionKey) }
+        val nextVersion by lazy { this.version!!.incrementVersion() }
 
         fun resetDependencyHandlingVersion(): String {
-            val nextVersion = this.version!!.incrementVersion()
             prop.setProperty(configure.versionKey, nextVersion)
             prop.store(FileWriter(versionPropertiesFile), null)
             return nextVersion
@@ -70,9 +70,13 @@ data class VersionPluginConfiguration<T : Any>(
         val member = configure.versionMember(newVersions)
         if (project.version != member) {
             throw Exception(
-                """member is not fitting: project.version: ${project.version} vs versionMember: $member - 
-                        Did you forget to update your ${configure.versionKey}?
-                        Maybe you should set your DependencyHandling version to ${dependencyHandlingData.version}?"""
+                """     member is not fitting: project.version: ${project.version} vs versionMember: $member - 
+                        Did you in your build.gradle.kts set version by:
+
+                            version = versions.setVersion { ${project.name} } ?
+                            
+                        Or maybe you should set in your buildscript classpath
+                        your DependencyHandling version to ${dependencyHandlingData.version}?"""
             )
         }
         newVersions.store(versionsFile)
@@ -112,7 +116,7 @@ fun createVersionTask(project: Project, name: String) {
                 versionPluginConfiguration.dependencyHandlingData.resetDependencyHandlingVersion()
             project.logger.quiet("reset dependencyHandling: $resetDependencyHandling")
             versionPluginConfiguration.publishDependencyHandling()
-            project.logger.quiet("published ${versionPluginConfiguration.projectDir} with version: ${versionPluginConfiguration.dependencyHandlingData.version}")
+            project.logger.quiet("published ${versionPluginConfiguration.projectDir} with version: ${versionPluginConfiguration.dependencyHandlingData.nextVersion}")
         }
     }
 }
