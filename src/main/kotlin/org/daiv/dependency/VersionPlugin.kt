@@ -4,6 +4,7 @@ import com.google.gson.GsonBuilder
 import org.gradle.api.Plugin
 import org.gradle.api.Project
 import org.gradle.api.Task
+import org.gradle.api.tasks.TaskContainer
 import org.gradle.tooling.GradleConnector
 import java.io.File
 import java.io.FileReader
@@ -11,32 +12,16 @@ import java.io.FileWriter
 import java.util.*
 import kotlin.reflect.KClass
 
-open class VersionPluginExtensions<T:Any> {
-    lateinit var clazz: KClass<T>
-    var resetVersion: T.() -> T = { this }
-    var versionKey = "dependencyHandlingVersion"
-    var publishTaskName = "artifactoryPublish"
-    var cleanTaskName = "clean"
-    var dependencyHandlingProperties = "dependencyHandling.properties"
-    var dependencyHandlingPropertyPath = "path"
-    var versionsJsonPath = "src/main/resources/versions.json"
-    var versionsProperties = "versions.properties"
 
-    fun getProjectDir(project: Project): String {
-        val p = java.util.Properties()
-        p.load(FileReader(project.file(dependencyHandlingProperties)))
-        return p.getProperty(dependencyHandlingPropertyPath)
-    }
-}
-
-data class VersionPluginConfiguration<T:Any>(
+data class VersionPluginConfiguration<T : Any>(
     val projectDir: String,
-    val configure: VersionPluginExtensions<T>,
+    val configure: VersionPluginExtension<T>,
     val project: Project
 ) {
     private fun projectDirFile() = project.file(projectDir)
+    val dependencyHandlingData = DependencyHandlingData()
 
-    fun publish() {
+    fun publishDependencyHandling() {
         val connector = GradleConnector.newConnector()
         connector.forProjectDirectory(projectDirFile())
         val connection = connector.connect()
@@ -46,45 +31,53 @@ data class VersionPluginConfiguration<T:Any>(
         connection.close()
     }
 
-    fun resetDependencyHandlingVersion() {
-        val prop = Properties()
+    inner class DependencyHandlingData() {
+        val prop: Properties = Properties()
         val versionPropertiesFile = project.file("${projectDirFile().path}/${configure.versionsProperties}")
-        prop.load(FileReader(versionPropertiesFile))
+
+        init {
+            prop.load(FileReader(versionPropertiesFile))
+        }
+
         val version = prop.getProperty(configure.versionKey)
-        prop.setProperty(configure.versionKey, version.increment())
-        prop.store(FileWriter(versionPropertiesFile), null)
+
+        fun resetDependencyHandlingVersion(): String {
+            val nextVersion = this.version!!.incrementVersion()
+            prop.setProperty(configure.versionKey, nextVersion)
+            prop.store(FileWriter(versionPropertiesFile), null)
+            return nextVersion
+        }
     }
 
-    private fun<T:Any> versions(
+    private fun <T : Any> readJson(
         json: String = String::class.java.classLoader.getResource("versions.json").readText(),
-        clazz:KClass<T>
+        clazz: KClass<T>
     ): T {
         val gson = GsonBuilder().setPrettyPrinting()
             .create()
         return gson.fromJson(json, clazz.java)!!
     }
 
-    fun resetMyVersion() {
-        val versionsFile = project.file("$projectDir/${configure.versionsJsonPath}")
+    fun resetMyVersion(): T {
+        val versionJsonPath =
+            "${configure.versionJsonResourcePath}/${configure.versionJsonPath}/${configure.versionJsonName}"
+        val versionsFile = project.file("$projectDir/${versionJsonPath}")
 
         val json = versionsFile.readText()
-        val versions = versions(json, configure.clazz)
-
+        val versions = readJson(json, configure.clazz)
         val resetVersion = configure.resetVersion
-        versions.resetVersion().store(versionsFile)
+        val newVersions = versions.resetVersion(versions.incrementVersion { configure.versionMember(versions) })
+        val member = configure.versionMember(newVersions)
+        if (project.version != member) {
+            throw Exception(
+                """member is not fitting: project.version: ${project.version} vs versionMember: $member - 
+                        Did you forget to update your ${configure.versionKey}?
+                        Maybe you should set your DependencyHandling version to ${dependencyHandlingData.version}?"""
+            )
+        }
+        newVersions.store(versionsFile)
+        return newVersions
     }
-}
-
-internal fun String.increment(): String {
-    val split = split(".")
-    val last = (split[split.size - 1]).toInt() + 1
-    val drop = split.dropLast(1)
-    return drop.joinToString(".") + ".$last"
-}
-
-
-fun <T:Any> T.increment(func: T.() -> String): String {
-    return func().increment()
 }
 
 internal fun <T : Any> T.store(file: File) {
@@ -96,19 +89,50 @@ internal fun <T : Any> T.store(file: File) {
     fw.close()
 }
 
+internal fun <T : Any> VersionPluginExtension<T>.getProjectDir(project: Project): String {
+    val p = Properties()
+    p.load(FileReader(project.file(dependencyHandlingProperties)))
+    return p.getProperty(dependencyHandlingPropertyPath)
+}
+
+
+fun createVersionTask(project: Project, name: String) {
+    val configure = project.extensions.create("$name", DefaultVersionsPluginExtension::class.java)
+    project.task("installVersions") { task: Task ->
+        task.doLast {
+            val versionPluginConfiguration =
+                VersionPluginConfiguration(
+                    configure.versionPluginBuilder.getProjectDir(project),
+                    configure.versionPluginBuilder,
+                    project
+                )
+            val reset = versionPluginConfiguration.resetMyVersion()
+            project.logger.quiet("version reset: $reset")
+            val resetDependencyHandling =
+                versionPluginConfiguration.dependencyHandlingData.resetDependencyHandlingVersion()
+            project.logger.quiet("reset dependencyHandling: $resetDependencyHandling")
+            versionPluginConfiguration.publishDependencyHandling()
+            project.logger.quiet("published ${versionPluginConfiguration.projectDir} with version: ${versionPluginConfiguration.dependencyHandlingData.version}")
+        }
+    }
+}
+
+open class DefaultVersionsPluginExtension {
+    lateinit var versionPluginBuilder: VersionPluginExtension<*>
+
+    fun setDepending(
+        tasks: TaskContainer,
+        artifactoryPublishName: String = "artifactoryPublish",
+        installVersions: String = "installVersions"
+    ) {
+        val artifactoryPublish = tasks.getByName(artifactoryPublishName)
+        artifactoryPublish.dependsOn(installVersions)
+    }
+}
 
 class VersionsPlugin : Plugin<Project> {
 
     override fun apply(target: Project) {
-        target.task("install") { task: Task ->
-            val configure = target.extensions.create("resetVersion", VersionPluginExtensions::class.java)
-            task.doLast {
-                val versionPluginConfiguration =
-                    VersionPluginConfiguration(configure.getProjectDir(target), configure, target)
-                versionPluginConfiguration.resetMyVersion()
-                versionPluginConfiguration.publish()
-                versionPluginConfiguration.resetDependencyHandlingVersion()
-            }
-        }
+        createVersionTask(target, "versionPlugin")
     }
 }

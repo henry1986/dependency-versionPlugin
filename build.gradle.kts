@@ -19,19 +19,23 @@ gradlePlugin {
 
 
 group = "org.daiv.dependency"
-version = "0.0.1"
+version = "0.0.59"
 
 repositories {
     mavenCentral()
+    maven("https://daiv.org/artifactory/gradle-dev-local")
     maven { url = uri("https://repo.gradle.org/gradle/libs-releases") }
 }
 
 dependencies {
     implementation("org.gradle:gradle-tooling-api:6.7")
     implementation("com.google.code.gson:gson:2.8.5")
+    implementation(project(":VersionPluginConfiguration"))
+    implementation("org.daiv.dependency:DependencyHandling:0.0.35")
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test-junit"))
 }
+
 tasks.withType<KotlinCompile>() {
     kotlinOptions.jvmTarget = "1.8"
 }
