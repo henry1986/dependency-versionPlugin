@@ -23,7 +23,7 @@ version = "0.1.3"
 
 repositories {
     mavenCentral()
-    maven("https://daiv.org/artifactory/gradle-dev-local")
+    maven("https://artifactory.daiv.org/artifactory/gradle-dev-local")
     maven { url = uri("https://repo.gradle.org/gradle/libs-releases") }
 }
 
@@ -31,7 +31,7 @@ dependencies {
     implementation("org.gradle:gradle-tooling-api:6.7")
     implementation("com.google.code.gson:gson:2.8.5")
     implementation(project(":VersionPluginConfiguration"))
-    implementation("org.daiv.dependency:DependencyHandling:0.0.35")
+    implementation("org.daiv.dependency:DependencyHandling:0.0.165")
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test-junit"))
 }
