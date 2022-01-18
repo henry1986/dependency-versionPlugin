@@ -5,12 +5,13 @@ plugins {
 }
 
 group = "org.daiv.dependency"
-version = "0.0.14"
+version = "0.0.15"
 
 repositories {
     mavenCentral()
-    maven("https://daiv.org/artifactory/gradle-dev-local")
+    maven("https://artifactory.daiv.org/artifactory/gradle-dev-local")
 }
+
 dependencies {
     implementation(kotlin("stdlib"))
     testImplementation(kotlin("test-junit"))
