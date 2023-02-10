@@ -134,7 +134,7 @@ open class DefaultVersionsPluginExtension {
     }
 }
 
-class VersionsPlugin : Plugin<Project> {
+class VersionPlugin : Plugin<Project> {
 
     override fun apply(target: Project) {
         createVersionTask(target, "versionPlugin")
